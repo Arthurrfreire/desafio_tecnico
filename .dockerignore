@@ -1,0 +1,9 @@
+_build
+deps
+tmp
+cover
+.elixir_ls
+.git
+node_modules
+priv/static/assets
+priv/static/cache_manifest.json

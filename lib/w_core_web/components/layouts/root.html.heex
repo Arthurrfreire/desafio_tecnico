@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content={get_csrf_token()} />
+    <.live_title default="WCore" suffix=" · Planta 42">
+      {assigns[:page_title]}
+    </.live_title>
+    <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    </script>
+    <script>
+      (() => {
+        const setTheme = (theme) => {
+          if (theme === "system") {
+            localStorage.removeItem("phx:theme");
+            document.documentElement.removeAttribute("data-theme");
+          } else {
+            localStorage.setItem("phx:theme", theme);
+            document.documentElement.setAttribute("data-theme", theme);
+          }
+        };
+        if (!document.documentElement.hasAttribute("data-theme")) {
+          setTheme(localStorage.getItem("phx:theme") || "system");
+        }
+        window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
+        
+        window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-slate-100 text-slate-950">
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/85 backdrop-blur-xl">
+      <div class="mx-auto flex max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <.link href={~p"/"} class="flex items-center gap-3 text-white">
+          <span class="flex size-10 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold tracking-[0.2em]">
+            WC
+          </span>
+          <span>
+            <span class="block text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Telemetria industrial
+            </span>
+            <span class="block text-base font-semibold">W-Core</span>
+          </span>
+        </.link>
+
+        <nav class="flex flex-wrap items-center justify-end gap-2 text-sm text-slate-200">
+          <%= if @current_scope do %>
+            <span class="hidden rounded-full border border-white/10 bg-white/5 px-3 py-2 text-slate-300 md:inline-flex">
+              {@current_scope.user.email}
+            </span>
+            <.link
+              href={~p"/dashboard"}
+              class="rounded-full px-4 py-2 font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            >
+              Dashboard
+            </.link>
+            <.link
+              href={~p"/users/settings"}
+              class="rounded-full px-4 py-2 font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            >
+              Settings
+            </.link>
+            <.link
+              href={~p"/users/log-out"}
+              method="delete"
+              class="rounded-full bg-white px-4 py-2 font-medium text-slate-950 transition hover:bg-slate-200"
+            >
+              Log out
+            </.link>
+          <% else %>
+            <.link
+              href={~p"/"}
+              class="rounded-full px-4 py-2 font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            >
+              Home
+            </.link>
+            <.link
+              href={~p"/users/register"}
+              class="rounded-full px-4 py-2 font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            >
+              Register
+            </.link>
+            <.link
+              href={~p"/users/log-in"}
+              class="rounded-full bg-white px-4 py-2 font-medium text-slate-950 transition hover:bg-slate-200"
+            >
+              Log in
+            </.link>
+          <% end %>
+        </nav>
+      </div>
+    </header>
+    {@inner_content}
+  </body>
+</html>

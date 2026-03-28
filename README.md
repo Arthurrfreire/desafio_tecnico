@@ -1,99 +1,115 @@
-# Desafio Técnico Elite: Motor de Estado em Tempo Real (W-Core)
+# W-Core
 
-Bem-vindo ao desafio técnico para Engenharia de Software na **Web-Engenharia**. 
+Motor de estado em tempo real para a Planta 42, implementado em Elixir + Phoenix LiveView, com autenticação via `phx.gen.auth`, leitura quente em ETS e persistência consolidada em SQLite.
 
-Nós construímos sistemas de missão crítica, arquiteturas cognitivas SOTA e infraestruturas resilientes puramente na BEAM. Este teste foi desenhado para avaliar não apenas sua capacidade de escrever código, mas como você toma decisões arquiteturais, gerencia estado concorrente e justifica suas escolhas.
+## O que foi entregue
 
----
+- Autenticação gerada oficialmente com `phx.gen.auth`
+- Contexto `Telemetry` com `nodes` e `node_metrics`
+- Ingestão de heartbeats por `Telemetry.ingest_heartbeat/1`
+- `heartbeat_journal` em SQLite para durabilidade dos eventos aceitos
+- ETS `:w_core_telemetry_cache` como camada quente
+- `Telemetry.Ingestor` como único writer em memória
+- `Telemetry.PersistenceWorker` fazendo write-behind periódico para SQLite
+- Dashboard autenticado em `/dashboard`
+- Teste concorrente com `10_000` eventos
+- `mix release` + `Dockerfile` multi-stage
+- Rascunhos técnicos em `/docs/drafts`
 
-## O Briefing: O Incidente na Planta 42
+## Arquitetura resumida
 
-**Contexto da Missão:**
-A Web-Engenharia foi acionada em caráter de urgência por um de seus clientes industriais. A "Planta 42", um complexo de manufatura operando 24/7, está à beira de um apagão logístico. Eles possuem milhares de sensores (Edge Devices) monitorando a saúde do maquinário.
+```mermaid
+flowchart LR
+  Heartbeats["Telemetry.ingest_heartbeat/1"] --> Ingestor["Telemetry.Ingestor"]
+  Ingestor --> Journal["SQLite / heartbeat_journal"]
+  Ingestor --> ETS[":w_core_telemetry_cache"]
+  Ingestor --> PubSub["Phoenix.PubSub"]
+  Worker["Telemetry.PersistenceWorker"] --> Journal
+  Worker --> SQLite["SQLite / node_metrics"]
+  Dashboard["LiveView /dashboard"] --> ETS
+  Dashboard --> PubSub
+```
 
-**O Problema:**
-O sistema legado deles — um monólito engessado — não está aguentando a carga. Os sensores enviam um "pulso" (heartbeat) a cada poucos segundos contendo métricas vitais. O banco de dados relacional tradicional sofre *lock* constante de escrita, os painéis da sala de operações apresentam um atraso de minutos (inaceitável para missão crítica), e falsos positivos estão paralisando a produção.
+## Como rodar localmente
 
-**A Sua Missão:**
-Você foi alocado na "Força-Tarefa W-Core". Sua missão é substituir o gargalo construindo um motor de estado em tempo real. O sistema rodará localmente no servidor da planta (Edge Computing), usando um banco de dados embutido, e deve ser imune a picos de tráfego. 
+```bash
+mix setup
+mix phx.server
+```
 
-A diretriz da operação é clara: *"Não podemos perder eventos, a tela deve piscar em tempo real na falha de uma máquina, e o histórico deve estar a salvo caso o servidor reinicie."*
+Depois:
 
----
+1. Acesse `http://127.0.0.1:4000`
+2. Crie um usuário em `/users/register`
+3. Entre no dashboard em `/dashboard`
+4. Em desenvolvimento, os links de autenticação ficam disponíveis em `http://127.0.0.1:4000/dev/mailbox`
 
-## Stack e Restrições
+As seeds já cadastram sensores fixos e publicam alguns heartbeats iniciais para a demo.
 
-* **Linguagem & Framework:** Elixir + Phoenix LiveView.
-* **Banco de Dados:** SQLite local (estritamente proibido o uso de dependências externas como Postgres ou Redis).
-* **Autenticação:** Gerada exclusivamente via `phx.gen.auth`.
-* **Estado & Cache:** Uso obrigatório de ETS e processos OTP (GenServer/Supervisor) para o fluxo de dados.
-* **Design System:** Componentes HEEx puros, criados por você (nada de bibliotecas pesadas de UI de terceiros).
-* **Infraestrutura:** Uma release Elixir pura, rodando sobre um Dockerfile simples.
+### Observação sobre `127.0.0.1` vs `localhost`
 
----
+- Para este projeto, o ambiente de desenvolvimento foi configurado para gerar links com `127.0.0.1:4000`
+- O motivo é evitar conflitos locais em máquinas onde `localhost:4000` possa estar apontando para outro processo
+- Para qualquer avaliador que rodar o projeto localmente, `http://127.0.0.1:4000` funcionará normalmente na própria máquina
+- Em um ambiente publicado de verdade, o endereço passa a ser definido pela configuração de runtime, por exemplo via `PHX_HOST`
 
-## A Regra de Ouro: A Cultura da Documentação
+## Como simular heartbeats
 
-Para nós, código que funciona mas não pode ser explicado é código legado. 
-**A cada passo de evolução concluído, você deve criar um arquivo Markdown na pasta `/docs/drafts/`** (ex: `/docs/drafts/step-1-foundation.md`). 
+```bash
+iex -S mix phx.server
+```
 
-Cada rascunho deve conter:
-1. O que foi implementado.
-2. O que mudou na arquitetura (diagramas em texto ou Mermaid são bem-vindos).
-3. Os *trade-offs* e o porquê das decisões (especialmente envolvendo concorrência e o banco).
+```elixir
+node = WCore.Telemetry.list_nodes() |> List.first()
 
----
+WCore.Telemetry.ingest_heartbeat(%{
+  node_id: node.id,
+  status: :critical,
+  payload: %{"temperature" => 118, "rpm" => 980}
+})
+```
 
-## Blueprint de Dados (Modelagem)
+## Testes
 
-A arquitetura exige a divisão do estado em duas camadas para evitar o gargalo de I/O:
+```bash
+mix test
+```
 
-### 1. Camada de Persistência (SQLite / Ecto)
-O banco atua como a fonte de verdade de longo prazo.
+Cobertura principal:
 
-* **Contexto `Accounts`:** Tabela `users` (Operadores da Planta 42, gerado pelo phx.gen.auth).
-* **Contexto `Telemetry`:** * Tabela `nodes` (Cadastro estático dos sensores: `id`, `machine_identifier`, `location`).
-  * Tabela `node_metrics` (Consolidado com o último estado conhecido: `node_id`, `status`, `total_events_processed`, `last_payload`, `last_seen_at`).
+- contexto `Telemetry`
+- reinicialização do `Ingestor`
+- dashboard autenticado
+- concorrência com `10_000` eventos
+- suíte gerada de autenticação
 
-### 2. Camada Transacional em Memória (Erlang ETS)
-Onde o "tsunami" de eventos é absorvido em tempo real.
+## Docker / release
 
-* **Tabela ETS:** `:w_core_telemetry_cache`
-* **Estrutura sugerida:** `{node_id, status, event_count, last_payload, timestamp}`
+Build:
 
-*O Desafio Arquitetural:* Eventos chegam -> GenServer atualiza o ETS imediatamente -> Um Worker assíncrono varre o ETS a cada `X` segundos/eventos e faz um `upsert` em lote no SQLite (*Write-Behind*).
+```bash
+docker build -t w_core .
+```
 
----
+Run:
 
-## Etapas de Evolução do Projeto
+```bash
+docker run --rm \
+  -p 4000:4000 \
+  -e SECRET_KEY_BASE="$(mix phx.gen.secret)" \
+  -v w_core_data:/data \
+  w_core
+```
 
-### Passo 1: O Perímetro de Segurança (Fundação e Autenticação)
-* **Missão:** Iniciar a aplicação, configurar o SQLite, gerar a autenticação e desenhar os limites do domínio (`Telemetry`) isolado do web.
-* **Entregável:** `/docs/drafts/step-1-foundation.md`
+O banco fica persistido no volume montado em `/data`, com `DATABASE_PATH=/data/w_core.db`.
 
-### Passo 2: O Coração da Usina (Erlang OTP & ETS)
-* **Missão:** Construir o sistema de ingestão. Usar `GenServer` para receber o tráfego, gravar no ETS para performance extrema e implementar o mecanismo *Write-Behind* para o SQLite.
-* **Entregável:** `/docs/drafts/step-2-otp-ets.md` (Defenda o tipo de tabela ETS e a estratégia de supervisão).
+Depois de subir o container, o acesso local continua sendo feito em `http://127.0.0.1:4000`.
 
-### Passo 3: A Sala de Controle (Design System e LiveView)
-* **Missão:** Criar o Dashboard para usuários autenticados usando LiveView e componentes HEEx limpos. A interface deve ler os dados quentes do ETS e reagir instantaneamente via `Phoenix.PubSub` quando novos pulsos alterarem o status das máquinas.
-* **Entregável:** `/docs/drafts/step-3-liveview-ds.md` (Explique como evitou gargalos no PubSub).
+## Decisões de simplificação
 
-### Passo 4: Simulação de Caos (Testes Rigorosos)
-* **Missão:** Provar a resiliência. Além de testes unitários, crie um teste de integração que injete **10.000 eventos concorrentes**. Prove via asserções que o ETS não perdeu a conta, que não houve condição de corrida e que o SQLite sincronizou o estado corretamente.
-* **Entregável:** `/docs/drafts/step-4-tests.md`
-
-### Passo 5: O Empacotamento para o Edge (Infraestrutura)
-* **Missão:** Criar o `Dockerfile` gerando uma `mix release` otimizada, garantindo a persistência do volume do banco. 
-* **Entregável:** `/docs/drafts/step-5-infra-arch.md` (Inclua um diagrama arquitetural documentando o fluxo final).
-
----
-
-## O que vamos avaliar?
-
-1. **Maturidade OTP:** O uso correto de GenServers, Supervisors e controle de concorrência.
-2. **Domínio do ETS:** Compreensão de performance no Erlang (ex: `ets:update_counter`).
-3. **Qualidade da Comunicação:** Seus rascunhos revelam clareza técnica.
-4. **Separação de Preocupações (CQRS base):** A divisão clara entre o fluxo de escrita orientado a eventos e o fluxo de leitura reativo.
-
-**Boa sorte. Estamos ansiosos para ver sua engenharia em ação.**
+- Sem endpoint HTTP de ingestão: a entrada oficial nesta versão é a API interna `Telemetry.ingest_heartbeat/1`
+- Um único `GenServer` escritor para simplificar concorrência e explicação
+- Cada heartbeat só recebe `:ok` depois de ser gravado no `heartbeat_journal` do SQLite
+- O worker continua assíncrono, mas consolida o `heartbeat_journal` em `node_metrics` em vez de depender exclusivamente da ETS
+- `status` vem do heartbeat; não há engine de thresholds
+- Não existe histórico analítico bruto de eventos; o `heartbeat_journal` é uma fila durável transitória e é drenado após a consolidação

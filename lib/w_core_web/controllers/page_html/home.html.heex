@@ -1,0 +1,74 @@
+<Layouts.flash_group flash={@flash} />
+<section class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+    <div class="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.34em] text-amber-300">
+          Desafio Técnico Web-Engenharia
+        </p>
+        <h1 class="mt-4 text-5xl font-semibold tracking-tight text-white sm:text-6xl">
+          W-Core
+        </h1>
+        <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
+          Motor de estado em tempo real para a Planta 42, com Phoenix LiveView, ETS, SQLite e uma trilha de documentação pensada para deixar as decisões fáceis de explicar.
+        </p>
+
+        <div class="mt-8 flex flex-wrap gap-3">
+          <%= if @current_scope && @current_scope.user do %>
+            <.link
+              navigate={~p"/dashboard"}
+              class="inline-flex rounded-full bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
+            >
+              Abrir dashboard
+            </.link>
+            <.link
+              navigate={~p"/users/settings"}
+              class="inline-flex rounded-full border border-slate-700 px-5 py-3 font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-900"
+            >
+              Configurações
+            </.link>
+          <% else %>
+            <.link
+              navigate={~p"/users/register"}
+              class="inline-flex rounded-full bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
+            >
+              Criar operador
+            </.link>
+            <.link
+              navigate={~p"/users/log-in"}
+              class="inline-flex rounded-full border border-slate-700 px-5 py-3 font-semibold text-slate-100 transition hover:border-slate-500 hover:bg-slate-900"
+            >
+              Entrar
+            </.link>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+        <article class="rounded-[1.75rem] border border-slate-800 bg-slate-900/70 p-6">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">OTP</p>
+          <h2 class="mt-3 text-xl font-semibold text-white">Um writer, menos ruído</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">
+            O `Telemetry.Ingestor` concentra a escrita na ETS e elimina a necessidade de coordenação complexa entre processos.
+          </p>
+        </article>
+
+        <article class="rounded-[1.75rem] border border-slate-800 bg-slate-900/70 p-6">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">ETS</p>
+          <h2 class="mt-3 text-xl font-semibold text-white">Leitura quente</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">
+            O dashboard lê o estado corrente direto da memória e usa PubSub só para mudanças de status.
+          </p>
+        </article>
+
+        <article class="rounded-[1.75rem] border border-slate-800 bg-slate-900/70 p-6">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">SQLite</p>
+          <h2 class="mt-3 text-xl font-semibold text-white">Persistência consolidada</h2>
+          <p class="mt-2 text-sm leading-6 text-slate-300">
+            O journal durável recebe cada heartbeat aceito e o worker consolida esse fluxo em `node_metrics` sem depender só da memória.
+          </p>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
