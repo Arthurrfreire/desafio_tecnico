@@ -21,6 +21,7 @@ defmodule WCoreWeb.DashboardLiveTest do
       assert html =~ "Planta 42"
       assert html =~ "PRESS-01"
       assert render(view) =~ "No signal"
+      assert html =~ "Simulação Monte Carlo"
 
       assert :ok =
                Telemetry.ingest_heartbeat(
@@ -28,6 +29,24 @@ defmodule WCoreWeb.DashboardLiveTest do
                )
 
       assert eventually(fn -> render(view) =~ "Critical" end)
+    end
+
+    test "can start the Monte Carlo simulator from the dashboard", %{conn: conn} do
+      node = node_fixture(machine_identifier: "PRESS-01", location: "Linha A")
+      on_exit(fn -> Telemetry.stop_simulation() end)
+
+      {:ok, view, _html} = live(conn, ~p"/dashboard")
+
+      view
+      |> element("button[phx-value-duration=\"30\"]")
+      |> render_click()
+
+      assert eventually(fn ->
+               snapshot = Telemetry.get_node_snapshot(node.id)
+               snapshot.total_events_processed > 0
+             end)
+
+      assert eventually(fn -> render(view) =~ "rodando" end)
     end
   end
 

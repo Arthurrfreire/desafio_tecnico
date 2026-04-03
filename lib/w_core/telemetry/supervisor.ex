@@ -11,7 +11,8 @@ defmodule WCore.Telemetry.Supervisor do
   def init(:ok) do
     children = [
       WCore.Telemetry.Ingestor,
-      WCore.Telemetry.PersistenceWorker
+      WCore.Telemetry.PersistenceWorker,
+      WCore.Telemetry.Simulator
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

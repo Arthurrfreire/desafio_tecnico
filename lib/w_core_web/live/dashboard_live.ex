@@ -20,13 +20,16 @@ defmodule WCoreWeb.DashboardLive do
      socket
      |> assign(:page_title, "Planta 42")
      |> assign(:highlighted_node_id, nil)
-     |> assign_dashboard(nodes)}
+     |> assign_dashboard(nodes)
+     |> assign_simulator_status()}
   end
 
   @impl true
   def handle_info(:refresh_dashboard, socket) do
     schedule_refresh()
-    {:noreply, assign_dashboard(socket, Telemetry.list_dashboard_nodes())}
+
+    {:noreply,
+     socket |> assign_dashboard(Telemetry.list_dashboard_nodes()) |> assign_simulator_status()}
   end
 
   @impl true
@@ -55,6 +58,36 @@ defmodule WCoreWeb.DashboardLive do
 
   def handle_info({:clear_highlight, _node_id}, socket) do
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("start_simulation", %{"duration" => duration}, socket) do
+    duration_seconds = String.to_integer(duration)
+
+    case Telemetry.start_simulation(duration_seconds: duration_seconds) do
+      {:ok, _status} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Simulação Monte Carlo iniciada por #{duration_seconds}s.")
+         |> assign_simulator_status()}
+
+      {:error, :no_nodes} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Cadastre ou seed alguns sensores antes de iniciar a simulação."
+         )}
+    end
+  end
+
+  def handle_event("stop_simulation", _params, socket) do
+    :ok = Telemetry.stop_simulation()
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Simulação interrompida.")
+     |> assign_simulator_status()}
   end
 
   @impl true
@@ -195,15 +228,15 @@ defmodule WCoreWeb.DashboardLive do
               <div class="overflow-x-auto">
                 <table class="min-w-full text-left">
                   <thead class="bg-slate-50/90 text-xs uppercase tracking-[0.2em] text-slate-500">
-                  <tr>
-                    <th class="px-5 py-4 font-semibold">Máquina</th>
-                    <th class="px-5 py-4 font-semibold">Localização</th>
-                    <th class="px-5 py-4 font-semibold">Status</th>
-                    <th class="px-5 py-4 font-semibold">Eventos</th>
-                    <th class="px-5 py-4 font-semibold">Último heartbeat</th>
-                    <th class="px-5 py-4 font-semibold">Payload</th>
-                    <th class="px-5 py-4 font-semibold text-right">Fonte</th>
-                  </tr>
+                    <tr>
+                      <th class="px-5 py-4 font-semibold">Máquina</th>
+                      <th class="px-5 py-4 font-semibold">Localização</th>
+                      <th class="px-5 py-4 font-semibold">Status</th>
+                      <th class="px-5 py-4 font-semibold">Eventos</th>
+                      <th class="px-5 py-4 font-semibold">Último heartbeat</th>
+                      <th class="px-5 py-4 font-semibold">Payload</th>
+                      <th class="px-5 py-4 font-semibold text-right">Fonte</th>
+                    </tr>
                   </thead>
                   <tbody>
                     <.node_row
@@ -243,7 +276,9 @@ defmodule WCoreWeb.DashboardLive do
                       <.status_badge status={node.status} />
                     </div>
                     <p class="mt-3 text-xs uppercase tracking-[0.14em] text-slate-400">
-                      {Integer.to_string(node.total_events_processed)} eventos • {overview_time(node.last_seen_at)}
+                      {Integer.to_string(node.total_events_processed)} eventos • {overview_time(
+                        node.last_seen_at
+                      )}
                     </p>
                   </div>
 
@@ -272,6 +307,93 @@ defmodule WCoreWeb.DashboardLive do
                   </p>
                 </div>
               </section>
+
+              <section class="rounded-[2rem] border border-slate-200/70 bg-white/90 p-6 shadow-sm backdrop-blur-sm">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                      Simulação Monte Carlo
+                    </p>
+                    <h3 class="mt-2 text-xl font-semibold text-slate-950">Tráfego em tempo real</h3>
+                  </div>
+                  <span class={[
+                    "inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em]",
+                    simulation_badge_classes(@simulator_status.running?)
+                  ]}>
+                    {simulation_badge_label(@simulator_status.running?)}
+                  </span>
+                </div>
+
+                <p class="mt-4 text-sm leading-6 text-slate-600">
+                  Gera heartbeats probabilísticos usando a própria API do domínio. Isso exercita
+                  ingestão, ETS, PubSub e consolidação dentro da mesma BEAM.
+                </p>
+
+                <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    phx-click="start_simulation"
+                    phx-value-duration="30"
+                    class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+                  >
+                    Iniciar 30s
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="start_simulation"
+                    phx-value-duration="60"
+                    class="inline-flex items-center justify-center rounded-2xl border border-slate-950 bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    Iniciar 60s
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="stop_simulation"
+                    disabled={!@simulator_status.running?}
+                    class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Parar
+                  </button>
+                </div>
+
+                <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Eventos emitidos
+                    </p>
+                    <p class="mt-2 text-2xl font-semibold text-slate-950">
+                      {Integer.to_string(@simulator_status.events_emitted)}
+                    </p>
+                  </div>
+
+                  <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Ticks
+                    </p>
+                    <p class="mt-2 text-2xl font-semibold text-slate-950">
+                      {Integer.to_string(@simulator_status.ticks)}
+                    </p>
+                  </div>
+
+                  <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Cadência
+                    </p>
+                    <p class="mt-2 text-base font-semibold text-slate-950">
+                      {@simulator_status.interval_ms} ms
+                    </p>
+                  </div>
+
+                  <div class="rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-4">
+                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      Janela
+                    </p>
+                    <p class="mt-2 text-base font-semibold text-slate-950">
+                      {simulation_duration_label(@simulator_status.duration_ms)}
+                    </p>
+                  </div>
+                </div>
+              </section>
             </aside>
           </section>
         </div>
@@ -289,6 +411,10 @@ defmodule WCoreWeb.DashboardLive do
     |> assign(:summary, summarize(nodes))
     |> assign(:attention_nodes, attention_nodes(nodes))
     |> assign(:overview, build_overview(nodes))
+  end
+
+  defp assign_simulator_status(socket) do
+    assign(socket, :simulator_status, Telemetry.simulation_status())
   end
 
   defp summarize(nodes) do
@@ -358,4 +484,13 @@ defmodule WCoreWeb.DashboardLive do
       if node.id == updated_node.id, do: updated_node, else: node
     end)
   end
+
+  defp simulation_badge_classes(true), do: "bg-emerald-100 text-emerald-800"
+  defp simulation_badge_classes(false), do: "bg-slate-200 text-slate-700"
+
+  defp simulation_badge_label(true), do: "rodando"
+  defp simulation_badge_label(false), do: "parada"
+
+  defp simulation_duration_label(nil), do: "contínua"
+  defp simulation_duration_label(duration_ms), do: "#{div(duration_ms, 1_000)}s"
 end

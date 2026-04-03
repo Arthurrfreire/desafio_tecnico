@@ -11,6 +11,7 @@ defmodule WCore.Telemetry do
   alias WCore.Telemetry.Node
   alias WCore.Telemetry.NodeMetric
   alias WCore.Telemetry.PersistenceWorker
+  alias WCore.Telemetry.Simulator
 
   @cache_table :w_core_telemetry_cache
   @status_topic "telemetry:status_changes"
@@ -79,6 +80,18 @@ defmodule WCore.Telemetry do
 
   def flush_metrics do
     PersistenceWorker.flush_now()
+  end
+
+  def start_simulation(opts \\ []) do
+    Simulator.start(opts)
+  end
+
+  def stop_simulation do
+    Simulator.stop()
+  end
+
+  def simulation_status do
+    Simulator.status()
   end
 
   defp merge_node_with_snapshot(%Node{} = node) do

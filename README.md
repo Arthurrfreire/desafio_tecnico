@@ -69,6 +69,32 @@ WCore.Telemetry.ingest_heartbeat(%{
 })
 ```
 
+## Simulação Monte Carlo em tempo real
+
+Para uma demo visual mais forte, o dashboard agora inclui um bloco de simulação com botões para
+iniciar e parar tráfego probabilístico em tempo real. A simulação roda dentro da mesma BEAM e usa
+a própria API `Telemetry.ingest_heartbeat/1`, então o fluxo exercita ingestão, ETS, PubSub e
+consolidação sem atalhos.
+
+### Pelo dashboard
+
+1. Suba a aplicação com `iex -S mix phx.server`
+2. Entre em `http://127.0.0.1:4000/dashboard`
+3. Use o card `Simulação Monte Carlo`
+4. Clique em `Iniciar 30s` ou `Iniciar 60s`
+5. Observe o status dos sensores, os cards agregados e os pontos de atenção reagindo em tempo real
+
+### Pelo IEx
+
+```elixir
+WCore.Telemetry.start_simulation(duration_seconds: 45, interval_ms: 250)
+WCore.Telemetry.simulation_status()
+WCore.Telemetry.stop_simulation()
+```
+
+O simulador usa amostragem probabilística para variar status e payloads. Também existem bursts
+ocasionais para deixar a demonstração mais viva na interface.
+
 ## Testes
 
 ```bash
